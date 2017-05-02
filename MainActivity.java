@@ -2,7 +2,6 @@ package com.septem.a5dmarkv;
 
 import android.Manifest;
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -18,10 +17,8 @@ import android.hardware.SensorManager;
 import android.media.CamcorderProfile;
 import android.media.MediaRecorder;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
@@ -54,6 +51,7 @@ public class MainActivity extends AppCompatActivity {
     private Activity thisActivity = this;
     private final int CAMERA_PERMISSION = 1;
     private final int EXTERNAL_STORAGE_PERMISSION = 2;
+    private final int AUDIO_RECORD_PERMISSION = 3;
     private int originalScreenBrightnessMode;
     private int originalScreenBrightness = 200;
 
@@ -142,45 +140,13 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
-        requestPermissions();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
 
-        getWidgetInstances();
-        setBrightnessMax();
-        startSensor();
-        mScreenMaskView.stopQRreading();
-        isQrMode = false;
-
-        if(mTextureView.isAvailable()){
-            openCamera();
-        }else {
-            mTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
-                @Override
-                public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int i, int i1) {
-                    openCamera();
-                }
-
-                @Override
-                public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int i, int i1) {
-
-                }
-
-                @Override
-                public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
-                    return false;
-                }
-
-                @Override
-                public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) {
-
-                }
-            });
-        }
+        requestPermissions();
     }
 
     @Override
@@ -215,11 +181,24 @@ public class MainActivity extends AppCompatActivity {
                 if(grantResults.length>0 &&
                         grantResults[0] == PackageManager.PERMISSION_DENIED)
                 {
-                    new AlertDialog.Builder(thisActivity)
+                    /*new AlertDialog.Builder(thisActivity)
                             .setMessage(R.string.requireWriteStorageFailed)
                             .setPositiveButton("确定",null)
-                            .create().show();
+                            .create().show();*/
+                    if(thisActivity!=null)
+                        thisActivity.finish();
                 }
+                break;
+            case AUDIO_RECORD_PERMISSION:
+                if(grantResults.length>0 &&
+                        grantResults[0] == PackageManager.PERMISSION_DENIED)
+                {
+                    if(thisActivity!=null)
+                        thisActivity.finish();
+                }
+                break;
+            default:
+                requestPermissions();
         }
     }
 
@@ -329,7 +308,7 @@ public class MainActivity extends AppCompatActivity {
                     CAMERA_PERMISSION);
         }
         //试图获取写入设定的权限
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        /*else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if(!Settings.System.canWrite(this)) {
                 new AlertDialog.Builder(thisActivity).setMessage(R.string.whyRequireSetting)
                         .setPositiveButton(R.string.yes, new DialogInterface.OnClickListener() {
@@ -341,14 +320,26 @@ public class MainActivity extends AppCompatActivity {
                         }).setNegativeButton(R.string.no,null)
                         .create().show();
             }
+        }*/
+        //试图写入麦克风权限
+        if(ActivityCompat.checkSelfPermission(thisActivity,Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(thisActivity,
+                    new String[]{Manifest.permission.RECORD_AUDIO},
+                    AUDIO_RECORD_PERMISSION);
         }
+
         //试图获取写入文件的权限
-        if(ActivityCompat.checkSelfPermission(thisActivity,Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        else if(ActivityCompat.checkSelfPermission(thisActivity,Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(thisActivity,
                     new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
                     EXTERNAL_STORAGE_PERMISSION);
         }
+
+        //正常启动
+        else
+            startAvalible();
     }
 
     /**
@@ -356,7 +347,9 @@ public class MainActivity extends AppCompatActivity {
      */
     private void releaseAll() {
         //unregister sensor listener
-        mSensorManager.unregisterListener(mSensorEventListener);
+        if(mSensorManager!=null) {
+            mSensorManager.unregisterListener(mSensorEventListener);
+        }
         if(mSensorManager!=null)
             mSensorManager = null;
         //release camera
@@ -382,9 +375,11 @@ public class MainActivity extends AppCompatActivity {
      * 还原亮度/亮度模式
      */
     private void restoreBrightness() {
-        windowLayoutParams.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
-        window.setAttributes(windowLayoutParams);
-        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        if(windowLayoutParams!=null) {
+            windowLayoutParams.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+            window.setAttributes(windowLayoutParams);
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
     }
 
     /**
@@ -771,6 +766,41 @@ public class MainActivity extends AppCompatActivity {
         if(flashMode!=null)
             setFlashMode();
     }
+
+    private void startAvalible() {
+        getWidgetInstances();
+        setBrightnessMax();
+        startSensor();
+        mScreenMaskView.stopQRreading();
+        isQrMode = false;
+
+        if(mTextureView.isAvailable()){
+            openCamera();
+        }else {
+            mTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+                @Override
+                public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int i, int i1) {
+                    openCamera();
+                }
+
+                @Override
+                public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int i, int i1) {
+
+                }
+
+                @Override
+                public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
+                    return false;
+                }
+
+                @Override
+                public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) {
+
+                }
+            });
+        }
+    }
+
 
     /**
      * 打开摄像头并开始预览
